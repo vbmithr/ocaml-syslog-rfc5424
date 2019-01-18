@@ -1,0 +1,4 @@
+(library
+ (name rfc5424)
+ (public_name syslog-rfc5424)
+ (libraries rresult logs syslog-message ptime tyre))
