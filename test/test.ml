@@ -23,6 +23,10 @@ let full_valid = [
   "ex2", {|<165>1 2003-08-24T05:14:15.000003-07:00 192.0.2.1 myproc 8710 - - %% It's time to make the do-nuts.|} ;
   "ex3", {|<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"] BOMAn application event log entry...|} ;
   "ex4", {|<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"][examplePriority@32473 class="high"]|} ;
+  "ex5", {|<14>1 2019-01-19T19:43:51.470399Z haramis titania.test.dummy_worker(1) 8348 - [ovh X-OVH-TOKEN="b5f5fb79-301a-4e9b-a413-12b788f6534e"][logs ] BOMWorker started for worker_init|} ;
+]
+
+let full_invalid = [
 ]
 
 let structured_data =
@@ -98,10 +102,17 @@ let full_valid =
      test_case n `Quick (fun () -> parse_print_full s)
    end full_valid
 
+let full_invalid =
+  "full_invalid",
+   List.map begin fun (n, s) ->
+     test_case n `Quick (fun () -> parse_print_full ~valid:false s)
+   end full_invalid
+
 let () =
   run "rfc5424" [
     sd_name_valid ;
     structured_data_valid ;
     structured_data_invalid ;
     full_valid ;
+    full_invalid ;
   ]
