@@ -39,6 +39,8 @@ val to_string : t -> string
 val show : t -> string
 val of_string : string -> (t, t Tyre.error) result
 
+val severity_of_level : Logs.level -> Syslog_message.severity
+
 (**/**)
 
 val equal_structured_data :

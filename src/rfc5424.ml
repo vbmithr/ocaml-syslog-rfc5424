@@ -231,6 +231,13 @@ let re =
 
 let of_string = Tyre.exec re
 
+let severity_of_level = function
+  | Logs.App -> Syslog_message.Notice
+  | Error -> Error
+  | Warning -> Warning
+  | Info -> Informational
+  | Debug -> Debug
+
 (*---------------------------------------------------------------------------
    Copyright (c) 2019 Vincent Bernardoff
 
