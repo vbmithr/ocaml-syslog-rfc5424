@@ -23,6 +23,16 @@ and header = {
   msgid : string option ;
 }
 
+let create
+    ?(facility=Syslog_message.User_Level_Messages)
+    ?(severity=Syslog_message.Notice)
+    ?hostname ?app_name ?procid ?msgid ?(tags=[]) ~ts () =
+  Format.kasprintf begin fun msg ->
+    let header = { facility ; severity ; version = 1 ; ts ;
+                   hostname ; app_name ; procid ; msgid } in
+    { header ; tags ; msg = Some msg }
+  end
+
 let equal_structured_data =
   let module SM = Map.Make(String) in
   let load m =

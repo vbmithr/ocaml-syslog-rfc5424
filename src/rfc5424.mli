@@ -23,6 +23,16 @@ and header = {
   msgid : string option ;
 }
 
+val create :
+  ?facility:Syslog_message.facility ->
+  ?severity:Syslog_message.severity ->
+  ?hostname:string ->
+  ?app_name:string ->
+  ?procid:string ->
+  ?msgid:string ->
+  ?tags:structured_data ->
+  ts:Ptime.t -> unit -> ('a, Format.formatter, unit, t) format4 -> 'a
+
 val equal : t -> t -> bool
 val pp : Format.formatter -> t -> unit
 val to_string : t -> string
