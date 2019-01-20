@@ -1,3 +1,4 @@
+open Astring
 open Rfc5424
 open Alcotest
 
@@ -33,6 +34,13 @@ let structured_data =
   testable pp_print_structured_data equal_structured_data
 let syslog = testable Rfc5424.pp Rfc5424.equal
 
+let string_ts =
+  let equal a b =
+    let suma = String.fold_left (fun a c -> a + Char.to_int c) 0 a in
+    let sumb = String.fold_left (fun a c -> a + Char.to_int c) 0 b in
+    String.length a = String.length b && abs (suma - sumb) < 2 in
+  testable Format.pp_print_string equal
+
 let parse_print_structured_data =
   let re = Tyre.(compile (whole_string Rfc5424.structured_data)) in
   fun ?(valid=true) s ->
@@ -61,7 +69,11 @@ let parse_print_full =
     match of_string s with
     | Error e -> failf "%a" Tyre.pp_error e
     | Ok t -> begin
+        let r = Rfc5424_capnp.capnp_of_syslog t in
+        let rs = Rfc5424_capnp.syslog_of_capnp r in
         let s' = Format.asprintf "%a" Rfc5424.pp t in
+        let rs' = Format.asprintf "%a" Rfc5424.pp rs in
+        check string_ts "capnp string equality" s' rs' ;
         match of_string s' with
         | Error e -> failf "%a" Tyre.pp_error e
         | Ok t' ->

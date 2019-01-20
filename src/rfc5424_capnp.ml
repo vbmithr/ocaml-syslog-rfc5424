@@ -4,6 +4,7 @@
   ---------------------------------------------------------------------------*)
 
 module R = Record.Make(Capnp.BytesMessage)
+open R.Builder
 
 module Option = struct
   let iter ~f = function
@@ -37,21 +38,22 @@ type defs = {
   u : unit deflist ;
 }
 
-let build_pairs ?section ?(prefix="_") ~defs tags =
-  let open R.Builder in
-  let prefixed_name d =
-    match section with
-    | None -> Logs.Tag.name d
-    | Some s -> s ^ prefix ^ Logs.Tag.name d in
+let rfc5424_section = "rfc5424_section"
+
+let build_pairs ~defs section tags =
   let init_key d =
     let p = Pair.init_root () in
-    Pair.key_set p (prefixed_name d) ;
+    Pair.key_set p (Logs.Tag.name d) ;
     let v = Pair.value_init p in
     p, v in
   let set_value (type p) (l : p deflist) v (tagv : p) =
     match l with
     | String _ -> Pair.Value.string_set v tagv
-    | _ -> failwith "" in
+    | Bool _ -> Pair.Value.bool_set v tagv
+    | Float _ -> Pair.Value.f64_set v tagv
+    | I64 _ -> Pair.Value.i64_set v tagv
+    | U64 _ -> Pair.Value.u64_set v tagv
+    | U _ -> Pair.Value.null_set v in
   let build_pairs tags pairs l =
     List.fold_left begin fun ((tags, pairs) as a) d ->
       match Logs.Tag.find d tags with
@@ -61,7 +63,13 @@ let build_pairs ?section ?(prefix="_") ~defs tags =
         set_value l v tagv ;
         Logs.Tag.rem d tags, p :: pairs
     end (tags, pairs) (get_list l) in
-  let tags, pairs = build_pairs tags [] defs.s in
+  let section_pair =
+    let p = Pair.init_root () in
+    Pair.key_set p rfc5424_section ;
+    let v = Pair.value_init p in
+    Pair.Value.string_set v section ;
+    p in
+  let tags, pairs = build_pairs tags [section_pair] defs.s in
   let tags, pairs = build_pairs tags pairs defs.b in
   let tags, pairs = build_pairs tags pairs defs.f in
   let tags, pairs = build_pairs tags pairs defs.i64 in
@@ -70,7 +78,7 @@ let build_pairs ?section ?(prefix="_") ~defs tags =
   Logs.Tag.fold begin fun (Logs.Tag.V (d, t)) pairs ->
     let p = Pair.init_root () in
     let v = Pair.value_init p in
-    Pair.key_set p (prefixed_name d) ;
+    Pair.key_set p (Logs.Tag.name d) ;
     Pair.Value.string_set v (Format.asprintf "%a" (Logs.Tag.printer d) t) ;
     p :: pairs
   end tags pairs
@@ -88,7 +96,6 @@ let capnp_of_syslog
     u64 = U64 u64 ;
     u = U u ;
   } in
-  let open R.Builder in
   let r = Record.init_root () in
   Record.facility_set_exn r (Syslog_message.int_of_facility facility) ;
   Record.severity_set_exn r (Syslog_message.int_of_severity severity) ;
@@ -97,12 +104,64 @@ let capnp_of_syslog
   Option.iter app_name ~f:(Record.appname_set r) ;
   Option.iter procid ~f:(Record.procid_set r) ;
   Option.iter msgid ~f:(Record.msgid_set r) ;
+  Option.iter msg ~f:(Record.msg_set r) ; (* OVH needs this *)
+  Option.iter msg ~f:(Record.full_msg_set r) ;
   let pairs = List.fold_left begin fun a (section, tags) ->
-      List.rev_append (build_pairs ~section ~defs tags) a
+      List.rev_append (build_pairs section ~defs tags) a
     end [] tags in
   let _ = Record.pairs_set_list r pairs in
-  Option.iter msg ~f:(Record.full_msg_set r) ;
   r
+
+let pp_print_int64 ppf i = Format.fprintf ppf "%Ld" i
+
+let string_option_of_string = function
+  | "" -> None
+  | s -> Some s
+
+module SM = Map.Make(String)
+
+let syslog_of_capnp r =
+  let facility =
+    Syslog_message.facility_of_int (Record.facility_get r) in
+  let severity =
+    Syslog_message.severity_of_int (Record.severity_get r) in
+  let hostname = string_option_of_string @@ Record.hostname_get r in
+  let app_name = string_option_of_string @@ Record.appname_get r in
+  let procid = string_option_of_string @@ Record.procid_get r in
+  let msgid = string_option_of_string @@ Record.msgid_get r in
+  let msg = string_option_of_string @@ Record.full_msg_get r in
+  let ts =
+    match Ptime.of_float_s (Record.ts_get r) with
+    | None -> Ptime.epoch
+    | Some ts -> ts in
+  let _, tags =
+    List.fold_left begin fun (c, m) p ->
+      let k = Pair.key_get p in
+      let v = Pair.value_get p in
+      let update d v m =
+        SM.update c begin function
+          | None -> Some (Logs.Tag.(add d v empty))
+          | Some s -> Some (Logs.Tag.add d v s)
+        end m in
+      match Pair.Value.get v with
+      | String s when k = rfc5424_section -> s, m
+      | String s -> c, update (Logs.Tag.def k Format.pp_print_string) s m
+      | Bool b -> c, update (Logs.Tag.def k Format.pp_print_bool) b m
+      | F64 f -> c, update (Logs.Tag.def k Format.pp_print_float) f m
+      | I64 i -> c, update (Logs.Tag.def k pp_print_int64) i m
+      | U64 i -> c, update (Logs.Tag.def k Uint64.printer) i m
+      | Null -> c, update (Logs.Tag.def k Format.pp_print_space) () m
+      | Undefined _ -> c, m
+    end ("", SM.empty) (Record.pairs_get_list r) in
+  let tags = SM.bindings tags in
+  Rfc5424.create
+    ?facility ?severity ?hostname
+    ?app_name ?procid ?msgid ?msg ~tags ~ts ()
+
+let pp ?string ?float ?i64 ?u64 ?u ~compression () ppf t =
+  let r = capnp_of_syslog ?string ?float ?i64 ?u64 ?u t in
+  let m = R.Builder.Record.to_message r in
+  Format.pp_print_string ppf (Capnp.Codecs.serialize ~compression m)
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2019 Vincent Bernardoff

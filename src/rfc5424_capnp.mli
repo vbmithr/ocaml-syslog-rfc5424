@@ -19,6 +19,18 @@ val capnp_of_syslog :
     type in the capnp representation instead of being serialized in a
     string. *)
 
+val syslog_of_capnp : R.Builder.Record.t -> Rfc5424.t
+
+val pp :
+  ?string:string Logs.Tag.def list ->
+  ?float:float Logs.Tag.def list ->
+  ?i64:int64 Logs.Tag.def list ->
+  ?u64:Uint64.t Logs.Tag.def list ->
+  ?u:unit Logs.Tag.def list ->
+  compression:Capnp.Codecs.compression_t -> unit ->
+  Format.formatter -> Rfc5424.t -> unit
+(** [pp ... ppf t] formats [t] in [capnp] format. *)
+
 (*---------------------------------------------------------------------------
    Copyright (c) 2019 Vincent Bernardoff
 
