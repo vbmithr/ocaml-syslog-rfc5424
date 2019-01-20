@@ -30,6 +30,16 @@ val create :
   ?app_name:string ->
   ?procid:string ->
   ?msgid:string ->
+  ?tags:(string * Logs.Tag.set) list ->
+  ?msg:string -> ts:Ptime.t -> unit -> t
+
+val fcreate :
+  ?facility:Syslog_message.facility ->
+  ?severity:Syslog_message.severity ->
+  ?hostname:string ->
+  ?app_name:string ->
+  ?procid:string ->
+  ?msgid:string ->
   ?tags:structured_data ->
   ts:Ptime.t -> unit -> ('a, Format.formatter, unit, t) format4 -> 'a
 

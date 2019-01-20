@@ -26,6 +26,14 @@ and header = {
 let create
     ?(facility=Syslog_message.User_Level_Messages)
     ?(severity=Syslog_message.Notice)
+    ?hostname ?app_name ?procid ?msgid ?(tags=[]) ?msg ~ts () =
+  let header = { facility ; severity ; version = 1 ; ts ;
+                 hostname ; app_name ; procid ; msgid } in
+  { header ; tags ; msg }
+
+let fcreate
+    ?(facility=Syslog_message.User_Level_Messages)
+    ?(severity=Syslog_message.Notice)
     ?hostname ?app_name ?procid ?msgid ?(tags=[]) ~ts () =
   Format.kasprintf begin fun msg ->
     let header = { facility ; severity ; version = 1 ; ts ;
