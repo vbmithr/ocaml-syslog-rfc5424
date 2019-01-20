@@ -6,7 +6,7 @@
 type t = {
   header : header ;
   tags : structured_data ;
-  msg : string option ;
+  msg : string ;
 }
 
 and structured_data =
@@ -17,10 +17,10 @@ and header = {
   severity : Syslog_message.severity ;
   version : int ;
   ts : Ptime.t ;
-  hostname : string option ;
-  app_name : string option ;
-  procid : string option ;
-  msgid : string option ;
+  hostname : string ;
+  app_name : string ;
+  procid : string ;
+  msgid : string ;
 }
 
 val create :

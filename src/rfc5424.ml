@@ -6,7 +6,7 @@
 type t = {
   header : header ;
   tags : structured_data ;
-  msg : string option ;
+  msg : string ;
 }
 
 and structured_data =
@@ -17,16 +17,17 @@ and header = {
   severity : Syslog_message.severity ;
   version : int ;
   ts : Ptime.t ;
-  hostname : string option ;
-  app_name : string option ;
-  procid : string option ;
-  msgid : string option ;
+  hostname : string ;
+  app_name : string ;
+  procid : string ;
+  msgid : string ;
 }
 
 let create
     ?(facility=Syslog_message.User_Level_Messages)
     ?(severity=Syslog_message.Notice)
-    ?hostname ?app_name ?procid ?msgid ?(tags=[]) ?msg ~ts () =
+    ?(hostname="") ?(app_name="") ?(procid="") ?(msgid="")
+    ?(tags=[]) ?(msg="") ~ts () =
   let header = { facility ; severity ; version = 1 ; ts ;
                  hostname ; app_name ; procid ; msgid } in
   { header ; tags ; msg }
@@ -34,11 +35,12 @@ let create
 let fcreate
     ?(facility=Syslog_message.User_Level_Messages)
     ?(severity=Syslog_message.Notice)
-    ?hostname ?app_name ?procid ?msgid ?(tags=[]) ~ts () =
+    ?(hostname="") ?(app_name="") ?(procid="") ?(msgid="")
+    ?(tags=[]) ~ts () =
   Format.kasprintf begin fun msg ->
     let header = { facility ; severity ; version = 1 ; ts ;
                    hostname ; app_name ; procid ; msgid } in
-    { header ; tags ; msg = Some msg }
+    { header ; tags ; msg }
   end
 
 let equal_structured_data =
@@ -59,9 +61,9 @@ let equal t t' =
   t.msg = t'.msg &&
   equal_structured_data t.tags t'.tags
 
-let pp_print_nil_option pp ppf = function
-  | None -> Format.pp_print_char ppf '-'
-  | Some v -> Format.fprintf ppf "%a" pp v
+let pp_print_string_option ppf = function
+  | "" -> Format.pp_print_char ppf '-'
+  | s -> Format.pp_print_string ppf s
 
 let pp_print_header ppf { facility ; severity ; version ; ts ;
                     hostname ; app_name ; procid ; msgid } =
@@ -69,10 +71,10 @@ let pp_print_header ppf { facility ; severity ; version ; ts ;
     Syslog_message.(int_of_facility facility * 8 + int_of_severity severity)
     version
     (Ptime.pp_rfc3339 ~frac_s:6 ~tz_offset_s:0 ()) ts
-    (pp_print_nil_option Format.pp_print_string) hostname
-    (pp_print_nil_option Format.pp_print_string) app_name
-    (pp_print_nil_option Format.pp_print_string) procid
-    (pp_print_nil_option Format.pp_print_string) msgid
+    pp_print_string_option hostname
+    pp_print_string_option app_name
+    pp_print_string_option procid
+    pp_print_string_option msgid
 
 let pp_print_kv ppf (Logs.Tag.V (d, v)) =
   Format.fprintf ppf "%s=\"%a\""
@@ -101,11 +103,11 @@ let pp_print_structured_data ppf = function
 
 let pp ppf { header ; tags ; msg } =
   match msg with
-  | None ->
+  | "" ->
     Format.fprintf ppf "%a %a"
       pp_print_header header
       pp_print_structured_data tags
-  | Some msg ->
+  | _ ->
     Format.fprintf ppf "%a %a BOM%s"
       pp_print_header header
       pp_print_structured_data tags msg
@@ -147,8 +149,8 @@ let ts =
 let stropt =
   let open Tyre in
   conv
-    (function `Right s -> Some s | `Left () -> None)
-    (function Some s -> `Right s | None -> `Left ())
+    (function `Right s -> s | `Left () -> "")
+    (function "" -> `Left () | s -> `Right s)
     (char '-' <|> pcre "[[:graph:]]+")
 
 let sd_name = Tyre.pcre "[^ =\\]\"]+"
@@ -210,18 +212,26 @@ let msg =
        else `Right s)
     (str "BOM" *> pcre ".*" <|> pcre "[^B].*")
 
+let string_of_stropt = function
+  | None -> ""
+  | Some s -> s
+
+let stropt_of_string = function
+  | "" -> None
+  | s -> Some s
+
 let of_tyre (((((((((facility, severity), version), ts),
                   hostname), app_name), procid), msgid), tags), msg) =
   let header = {
     facility ; severity ; version ; ts ;
     hostname ; app_name ; procid ; msgid } in
-  { header ; tags ; msg }
+  { header ; tags ; msg = string_of_stropt msg }
 
 let to_tyre { header = {
     facility ; severity ; version ; ts ;
     hostname ; app_name ; procid ; msgid } ; tags ; msg } =
   (((((((((facility, severity), version), ts),
-        hostname), app_name), procid), msgid), tags), msg)
+        hostname), app_name), procid), msgid), tags), stropt_of_string msg)
 
 let re =
   let open Tyre in

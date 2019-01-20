@@ -6,11 +6,9 @@
 module R = Record.Make(Capnp.BytesMessage)
 open R.Builder
 
-module Option = struct
-  let iter ~f = function
-    | None -> ()
-    | Some v -> f v
-end
+let iter_non_empty_string ~f = function
+  | "" -> ()
+  | s -> f s
 
 type _ deflist =
   | String : string Logs.Tag.def list -> string deflist
@@ -100,12 +98,12 @@ let capnp_of_syslog
   Record.facility_set_exn r (Syslog_message.int_of_facility facility) ;
   Record.severity_set_exn r (Syslog_message.int_of_severity severity) ;
   Record.ts_set r (Ptime.to_float_s ts) ;
-  Option.iter hostname ~f:(Record.hostname_set r) ;
-  Option.iter app_name ~f:(Record.appname_set r) ;
-  Option.iter procid ~f:(Record.procid_set r) ;
-  Option.iter msgid ~f:(Record.msgid_set r) ;
-  Option.iter msg ~f:(Record.msg_set r) ; (* OVH needs this *)
-  Option.iter msg ~f:(Record.full_msg_set r) ;
+  iter_non_empty_string hostname ~f:(Record.hostname_set r) ;
+  iter_non_empty_string app_name ~f:(Record.appname_set r) ;
+  iter_non_empty_string procid ~f:(Record.procid_set r) ;
+  iter_non_empty_string msgid ~f:(Record.msgid_set r) ;
+  iter_non_empty_string msg ~f:(Record.msg_set r) ; (* OVH needs this *)
+  iter_non_empty_string msg ~f:(Record.full_msg_set r) ;
   let pairs = List.fold_left begin fun a (section, tags) ->
       List.rev_append (build_pairs section ~defs tags) a
     end [] tags in

@@ -30,6 +30,12 @@ let full_valid = [
 let full_invalid = [
 ]
 
+let trip = [
+  "minimal", Rfc5424.create ~ts:Ptime.epoch () ;
+  "empty_hostname", Rfc5424.create ~ts:Ptime.epoch ~hostname:"" () ;
+  "empty_msg", Rfc5424.create ~ts:Ptime.epoch ~msg:"" () ;
+]
+
 let structured_data =
   testable pp_print_structured_data equal_structured_data
 let syslog = testable Rfc5424.pp Rfc5424.equal
@@ -59,6 +65,19 @@ let parse_print_structured_data =
           check string "string equality" s s' ;
           check structured_data "type equality" data data'
 
+let roundtrip t =
+  let r = Rfc5424_capnp.capnp_of_syslog t in
+  let rs = Rfc5424_capnp.syslog_of_capnp r in
+  let s' = Format.asprintf "%a" Rfc5424.pp t in
+  let rs' = Format.asprintf "%a" Rfc5424.pp rs in
+  check string_ts "capnp string equality" s' rs' ;
+  match of_string s' with
+  | Error e -> failf "%a" Tyre.pp_error e
+  | Ok t' ->
+    let s'' = Format.asprintf "%a" Rfc5424.pp t' in
+    check string "string equality" s' s'' ;
+    check syslog "type equality" t t'
+
 let parse_print_full =
   fun ?(valid=true) s ->
   if not valid then
@@ -68,19 +87,7 @@ let parse_print_full =
   else
     match of_string s with
     | Error e -> failf "%a" Tyre.pp_error e
-    | Ok t -> begin
-        let r = Rfc5424_capnp.capnp_of_syslog t in
-        let rs = Rfc5424_capnp.syslog_of_capnp r in
-        let s' = Format.asprintf "%a" Rfc5424.pp t in
-        let rs' = Format.asprintf "%a" Rfc5424.pp rs in
-        check string_ts "capnp string equality" s' rs' ;
-        match of_string s' with
-        | Error e -> failf "%a" Tyre.pp_error e
-        | Ok t' ->
-          let s'' = Format.asprintf "%a" Rfc5424.pp t' in
-          check string "string equality" s' s'' ;
-          check syslog "type equality" t t' ;
-      end
+    | Ok t -> roundtrip t
 
 let parse_print_sd_name =
   let re = Tyre.compile sd_name in
@@ -108,6 +115,12 @@ let structured_data_invalid =
      test_case n `Quick (fun () -> parse_print_structured_data ~valid:false s)
    end structured_data_invalid
 
+let trip =
+  "trip",
+  List.map begin fun (n, t) ->
+     test_case n `Quick (fun () -> roundtrip t)
+  end trip
+
 let full_valid =
   "full_valid",
    List.map begin fun (n, s) ->
@@ -125,6 +138,7 @@ let () =
     sd_name_valid ;
     structured_data_valid ;
     structured_data_invalid ;
+    trip ;
     full_valid ;
     full_invalid ;
   ]
