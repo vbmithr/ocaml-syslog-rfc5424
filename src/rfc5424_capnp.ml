@@ -3,41 +3,7 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-type (_,_) eq = Eq : ('a,'a) eq
-
-type _ typ =
-  | String : string typ
-  | Bool : bool typ
-  | Float : float typ
-  | I64 : int64 typ
-  | U64 : Uint64.t typ
-  | U : unit typ
-
-type tydef = Dyn : 'a typ * 'a Logs.Tag.def -> tydef
-
-let string v = Dyn (String, v)
-let bool v = Dyn (Bool, v)
-let float v = Dyn (Float, v)
-let i64 v = Dyn (I64, v)
-let u64 v = Dyn (U64, v)
-let u v = Dyn (U, v)
-
-let rec eq_type : type a b. a typ -> b typ -> (a,b) eq option =
-  fun a b -> match a, b with
-  | String, String -> Some Eq
-  | Bool, Bool -> Some Eq
-  | Float, Float -> Some Eq
-  | I64, I64 -> Some Eq
-  | U64, U64 -> Some Eq
-  | U, U -> Some Eq
-  | _ -> None
-
-let get_tydef : type a. a typ -> tydef -> Logs.Tag.set -> a option =
-  fun a (Dyn(b,x)) set ->
-  match eq_type a b with
-  | None -> None
-  | Some Eq -> Logs.Tag.find x set
-
+open Rfc5424
 module R = Record.Make(Capnp.BytesMessage)
 open R.Builder
 
@@ -48,26 +14,32 @@ let iter_non_empty_string ~f = function
 let rfc5424_section = "rfc5424_section"
 
 let build_pairs ~tydefs section tags =
-  let create_pair :
-    type a. Logs.Tag.set -> a typ -> tydef -> Logs.Tag.set * Pair.t option
-    = fun tags typ ((Dyn (_, d)) as tydef) ->
-      match get_tydef typ tydef tags with
-      | None -> tags, None
-      | Some tagv ->
-        let p = Pair.init_root () in
-        Pair.key_set p (Logs.Tag.name d) ;
-        let v = Pair.value_init p in
-        begin match typ with
+  let set_value : type a. a Tag.typ -> Pair.Value.t -> a -> unit =
+    fun typ v tagv ->
+      match typ with
         | String -> Pair.Value.string_set v tagv
         | Bool -> Pair.Value.bool_set v tagv
         | Float -> Pair.Value.f64_set v tagv
         | I64 -> Pair.Value.i64_set v tagv
         | U64 -> Pair.Value.u64_set v tagv
-        | U -> Pair.Value.null_set v
-        end ;
-        Logs.Tag.rem d tags, Some p in
+        | U -> Pair.Value.null_set v in
+  let create_pair :
+    type a. Logs.Tag.set -> a Tag.typ -> Tag.tydef -> Logs.Tag.set * Pair.t option
+    = fun tags typ tydef ->
+      match Tag.find typ tydef tags with
+      | None
+      | Some (_, None) -> tags, None
+      | Some (d, Some tagv) ->
+        let p = Pair.init_root () in
+        Pair.key_set p (Logs.Tag.name d) ;
+        let v = Pair.value_init p in
+        set_value typ v tagv ;
+        Logs.Tag.rem d tags, Some p
+  in
   let build_pairs tags pairs tydefs =
-    List.fold_left begin fun ((tags, pairs) as a) ((Dyn (t, d)) as tydef) ->
+    List.fold_left begin fun
+      ((tags, pairs) as a)
+      (Tag.Dyn (t, _) as tydef) ->
       match create_pair tags t tydef with
       | _, None -> a
       | tags, Some p -> tags, p :: pairs

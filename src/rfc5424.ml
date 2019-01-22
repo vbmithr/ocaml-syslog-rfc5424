@@ -3,6 +3,55 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+module Tag = struct
+  open Logs.Tag
+
+  type (_,_) eq = Eq : ('a,'a) eq
+
+  type _ typ =
+    | String : string typ
+    | Bool : bool typ
+    | Float : float typ
+    | I64 : int64 typ
+    | U64 : Uint64.t typ
+    | U : unit typ
+
+  type tydef = Dyn : 'a typ * 'a def -> tydef
+
+  let string v = Dyn (String, v)
+  let bool v = Dyn (Bool, v)
+  let float v = Dyn (Float, v)
+  let i64 v = Dyn (I64, v)
+  let u64 v = Dyn (U64, v)
+  let u v = Dyn (U, v)
+
+  let eq_type : type a b. a typ -> b typ -> (a,b) eq option =
+    fun a b -> match a, b with
+      | String, String -> Some Eq
+      | Bool, Bool -> Some Eq
+      | Float, Float -> Some Eq
+      | I64, I64 -> Some Eq
+      | U64, U64 -> Some Eq
+      | U, U -> Some Eq
+      | _ -> None
+
+  let def :
+    type a. a typ -> tydef -> a def option = fun typ (Dyn (t, def)) ->
+    match eq_type typ t with
+    | None -> None
+    | Some Eq -> Some def
+
+  let find :
+    type a. a typ -> tydef -> Logs.Tag.set -> (a def * a option) option =
+    fun a (Dyn(b,x)) set ->
+    match eq_type a b with
+    | None -> None
+    | Some Eq ->
+      match find x set with
+      | None -> Some (x, None)
+      | Some v -> Some (x, Some v)
+end
+
 type t = {
   header : header ;
   tags : structured_data ;

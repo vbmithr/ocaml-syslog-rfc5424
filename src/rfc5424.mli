@@ -3,6 +3,38 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+module Tag : sig
+  open Logs.Tag
+
+  type _ typ =
+    | String : string typ
+    | Bool : bool typ
+    | Float : float typ
+    | I64 : int64 typ
+    | U64 : Uint64.t typ
+    | U : unit typ
+    (** Type of a metric type (compatible with Warp10 and flowgger
+        representation). *)
+
+  type tydef = Dyn : 'a typ * 'a def -> tydef
+  (** Existential type for log tag definiton. *)
+
+  val string : string def -> tydef
+  val bool : bool def -> tydef
+  val float : float def -> tydef
+  val i64 : int64 def -> tydef
+  val u64 : Uint64.t def -> tydef
+  val u : unit def -> tydef
+
+  val def : 'a typ -> tydef -> 'a def option
+  (** [def typ tydef] is [Some def] is tydef contains a def of type
+      ['a], or [None] otherwise. *)
+
+  val find : 'a typ -> tydef -> set -> ('a def * 'a option) option
+  (** [find typ tydef set] is [Some value] of requested type and
+      definition if found in [set], or [None] otherwise. *)
+end
+
 type t = {
   header : header ;
   tags : structured_data ;

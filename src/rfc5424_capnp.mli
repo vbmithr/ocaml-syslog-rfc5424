@@ -3,19 +3,11 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+open Rfc5424
 module R : Record.S
 
-type tydef
-
-val string : string Logs.Tag.def -> tydef
-val bool : bool Logs.Tag.def -> tydef
-val float : float Logs.Tag.def -> tydef
-val i64 : int64 Logs.Tag.def -> tydef
-val u64 : Uint64.t Logs.Tag.def -> tydef
-val u : unit Logs.Tag.def -> tydef
-
 val capnp_of_syslog :
-  ?tydefs:tydef list -> Rfc5424.t -> R.Builder.Record.t
+  ?tydefs:Tag.tydef list -> Rfc5424.t -> R.Builder.Record.t
 (** [capnp_of_syslog ?string ... t] is the flowgger capnp
     representation of a RFC5424 syslog entry. If optional tag
     definitions are provided, tags will be encoded with their native
@@ -25,7 +17,7 @@ val capnp_of_syslog :
 val syslog_of_capnp : R.Builder.Record.t -> Rfc5424.t
 
 val pp :
-  ?tydefs:tydef list ->
+  ?tydefs:Tag.tydef list ->
   compression:Capnp.Codecs.compression_t -> unit ->
   Format.formatter -> Rfc5424.t -> unit
 (** [pp ... ppf t] formats [t] in [capnp] format. *)
