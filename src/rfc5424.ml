@@ -115,7 +115,7 @@ let pp_print_string_option ppf = function
   | s -> Format.pp_print_string ppf s
 
 let pp_print_header ppf { facility ; severity ; version ; ts ;
-                    hostname ; app_name ; procid ; msgid } =
+                          hostname ; app_name ; procid ; msgid } =
   Format.fprintf ppf "<%d>%d %a %a %a %a %a"
     Syslog_message.(int_of_facility facility * 8 + int_of_severity severity)
     version
@@ -132,8 +132,8 @@ let pp_print_kv ppf (Logs.Tag.V (d, v)) =
 let pp_print_tagset ?pp_space pp ppf set =
   Logs.Tag.fold begin fun t a ->
     begin match a, pp_space with
-    | true, Some pp -> Format.fprintf ppf "%a" pp ()
-    | _ -> ()
+      | true, Some pp -> Format.fprintf ppf "%a" pp ()
+      | _ -> ()
     end ;
     Format.fprintf ppf "%a" pp t ;
     true
@@ -187,10 +187,10 @@ let ts =
   let open Rresult in
   let open Tyre in
   conv begin fun s ->
-      match Ptime.of_rfc3339 s with
-        | Error (`RFC3339 _) as e ->
-          R.error_msg_to_invalid_arg (Ptime.rfc3339_error_to_msg e)
-        | Ok (t, _, _) -> t
+    match Ptime.of_rfc3339 s with
+    | Error (`RFC3339 _) as e ->
+      R.error_msg_to_invalid_arg (Ptime.rfc3339_error_to_msg e)
+    | Ok (t, _, _) -> t
   end
     (fun s -> Ptime.to_rfc3339 s)
     (pcre "[0-9+-\\.:TZtz]+")
