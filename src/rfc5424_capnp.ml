@@ -3,6 +3,41 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+type (_,_) eq = Eq : ('a,'a) eq
+
+type _ typ =
+  | String : string typ
+  | Bool : bool typ
+  | Float : float typ
+  | I64 : int64 typ
+  | U64 : Uint64.t typ
+  | U : unit typ
+
+type tydef = Dyn : 'a typ * 'a Logs.Tag.def -> tydef
+
+let string v = Dyn (String, v)
+let bool v = Dyn (Bool, v)
+let float v = Dyn (Float, v)
+let i64 v = Dyn (I64, v)
+let u64 v = Dyn (U64, v)
+let u v = Dyn (U, v)
+
+let rec eq_type : type a b. a typ -> b typ -> (a,b) eq option =
+  fun a b -> match a, b with
+  | String, String -> Some Eq
+  | Bool, Bool -> Some Eq
+  | Float, Float -> Some Eq
+  | I64, I64 -> Some Eq
+  | U64, U64 -> Some Eq
+  | U, U -> Some Eq
+  | _ -> None
+
+let get_tydef : type a. a typ -> tydef -> Logs.Tag.set -> a option =
+  fun a (Dyn(b,x)) set ->
+  match eq_type a b with
+  | None -> None
+  | Some Eq -> Logs.Tag.find x set
+
 module R = Record.Make(Capnp.BytesMessage)
 open R.Builder
 
@@ -10,69 +45,40 @@ let iter_non_empty_string ~f = function
   | "" -> ()
   | s -> f s
 
-type _ deflist =
-  | String : string Logs.Tag.def list -> string deflist
-  | Bool : bool Logs.Tag.def list -> bool deflist
-  | Float : float Logs.Tag.def list -> float deflist
-  | I64 : int64 Logs.Tag.def list -> int64 deflist
-  | U64 : Uint64.t Logs.Tag.def list -> Uint64.t deflist
-  | U : unit Logs.Tag.def list -> unit deflist
-
-let get_list :
-  type a. a deflist -> a Logs.Tag.def list = function
-  | String l -> l
-  | Bool l -> l
-  | Float l -> l
-  | I64 l -> l
-  | U64 l -> l
-  | U l -> l
-
-type defs = {
-  s : string deflist ;
-  b : bool deflist ;
-  f : float deflist ;
-  i64 : Int64.t deflist ;
-  u64 : Uint64.t deflist ;
-  u : unit deflist ;
-}
-
 let rfc5424_section = "rfc5424_section"
 
-let build_pairs ~defs section tags =
-  let init_key d =
-    let p = Pair.init_root () in
-    Pair.key_set p (Logs.Tag.name d) ;
-    let v = Pair.value_init p in
-    p, v in
-  let set_value (type p) (l : p deflist) v (tagv : p) =
-    match l with
-    | String _ -> Pair.Value.string_set v tagv
-    | Bool _ -> Pair.Value.bool_set v tagv
-    | Float _ -> Pair.Value.f64_set v tagv
-    | I64 _ -> Pair.Value.i64_set v tagv
-    | U64 _ -> Pair.Value.u64_set v tagv
-    | U _ -> Pair.Value.null_set v in
-  let build_pairs tags pairs l =
-    List.fold_left begin fun ((tags, pairs) as a) d ->
-      match Logs.Tag.find d tags with
-      | None -> a
+let build_pairs ~tydefs section tags =
+  let create_pair :
+    type a. Logs.Tag.set -> a typ -> tydef -> Logs.Tag.set * Pair.t option
+    = fun tags typ ((Dyn (_, d)) as tydef) ->
+      match get_tydef typ tydef tags with
+      | None -> tags, None
       | Some tagv ->
-        let p, v = init_key d in
-        set_value l v tagv ;
-        Logs.Tag.rem d tags, p :: pairs
-    end (tags, pairs) (get_list l) in
+        let p = Pair.init_root () in
+        Pair.key_set p (Logs.Tag.name d) ;
+        let v = Pair.value_init p in
+        begin match typ with
+        | String -> Pair.Value.string_set v tagv
+        | Bool -> Pair.Value.bool_set v tagv
+        | Float -> Pair.Value.f64_set v tagv
+        | I64 -> Pair.Value.i64_set v tagv
+        | U64 -> Pair.Value.u64_set v tagv
+        | U -> Pair.Value.null_set v
+        end ;
+        Logs.Tag.rem d tags, Some p in
+  let build_pairs tags pairs tydefs =
+    List.fold_left begin fun ((tags, pairs) as a) ((Dyn (t, d)) as tydef) ->
+      match create_pair tags t tydef with
+      | _, None -> a
+      | tags, Some p -> tags, p :: pairs
+    end (tags, pairs) tydefs in
   let section_pair =
     let p = Pair.init_root () in
     Pair.key_set p rfc5424_section ;
     let v = Pair.value_init p in
     Pair.Value.string_set v section ;
     p in
-  let tags, pairs = build_pairs tags [section_pair] defs.s in
-  let tags, pairs = build_pairs tags pairs defs.b in
-  let tags, pairs = build_pairs tags pairs defs.f in
-  let tags, pairs = build_pairs tags pairs defs.i64 in
-  let tags, pairs = build_pairs tags pairs defs.u64 in
-  let tags, pairs = build_pairs tags pairs defs.u in
+  let tags, pairs = build_pairs tags [section_pair] tydefs in
   Logs.Tag.fold begin fun (Logs.Tag.V (d, t)) pairs ->
     let p = Pair.init_root () in
     let v = Pair.value_init p in
@@ -81,19 +87,9 @@ let build_pairs ~defs section tags =
     p :: pairs
   end tags pairs
 
-let capnp_of_syslog
-    ?(string=[]) ?(bool=[]) ?(float=[])
-    ?(i64=[]) ?(u64=[]) ?(u=[])
+let capnp_of_syslog ?(tydefs=[])
     ({ header = { facility; severity; version = _; ts;
                   hostname; app_name; procid; msgid }; tags; msg } : Rfc5424.t) =
-  let defs = {
-    s = String string ;
-    b = Bool bool ;
-    f = Float float ;
-    i64 = I64 i64 ;
-    u64 = U64 u64 ;
-    u = U u ;
-  } in
   let r = Record.init_root () in
   Record.facility_set_exn r (Syslog_message.int_of_facility facility) ;
   Record.severity_set_exn r (Syslog_message.int_of_severity severity) ;
@@ -105,7 +101,7 @@ let capnp_of_syslog
   iter_non_empty_string msg ~f:(Record.msg_set r) ; (* OVH needs this *)
   iter_non_empty_string msg ~f:(Record.full_msg_set r) ;
   let pairs = List.fold_left begin fun a (section, tags) ->
-      List.rev_append (build_pairs section ~defs tags) a
+      List.rev_append (build_pairs section ~tydefs tags) a
     end [] tags in
   let _ = Record.pairs_set_list r pairs in
   r
@@ -156,8 +152,8 @@ let syslog_of_capnp r =
     ?facility ?severity ?hostname
     ?app_name ?procid ?msgid ?msg ~tags ~ts ()
 
-let pp ?string ?float ?i64 ?u64 ?u ~compression () ppf t =
-  let r = capnp_of_syslog ?string ?float ?i64 ?u64 ?u t in
+let pp ?tydefs ~compression () ppf t =
+  let r = capnp_of_syslog ?tydefs t in
   let m = R.Builder.Record.to_message r in
   Format.pp_print_string ppf (Capnp.Codecs.serialize ~compression m)
 
