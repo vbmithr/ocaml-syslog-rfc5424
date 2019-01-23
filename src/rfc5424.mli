@@ -63,6 +63,10 @@ and header = {
   msgid : string ;
 }
 
+val create_sd_element :
+  ?defs:Tag.tydef list -> section:string ->
+  tags:Logs.Tag.set -> sd_element
+
 val create :
   ?facility:Syslog_message.facility ->
   ?severity:Syslog_message.severity ->

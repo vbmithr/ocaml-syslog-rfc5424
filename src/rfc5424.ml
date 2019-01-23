@@ -83,6 +83,9 @@ and header = {
   msgid : string ;
 }
 
+let create_sd_element ?(defs=[]) ~section ~tags =
+  { section ; defs ; tags }
+
 let create
     ?(facility=Syslog_message.User_Level_Messages)
     ?(severity=Syslog_message.Notice)
