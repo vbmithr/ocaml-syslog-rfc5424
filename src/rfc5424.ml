@@ -18,6 +18,8 @@ module Tag = struct
 
   type tydef = Dyn : 'a typ * 'a def -> tydef
 
+  module TS = Set.Make(struct type t = tydef let compare = Pervasives.compare end)
+
   let string v = Dyn (String, v)
   let bool v = Dyn (Bool, v)
   let float v = Dyn (Float, v)
@@ -41,6 +43,12 @@ module Tag = struct
     | None -> None
     | Some Eq -> Some def
 
+  let add :
+    type a. a typ -> tydef -> a -> set -> set = fun typ (Dyn (t, d)) v set ->
+    match eq_type typ t with
+    | None -> set
+    | Some Eq -> add d v set
+
   let find :
     type a. a typ -> tydef -> Logs.Tag.set -> (a def * a option) option =
     fun a (Dyn(b,x)) set ->
@@ -54,12 +62,15 @@ end
 
 type t = {
   header : header ;
-  tags : structured_data ;
+  structured_data : sd_element list ;
   msg : string ;
 }
 
-and structured_data =
-  (string * Logs.Tag.set) list
+and sd_element = {
+  section: string ;
+  defs : Tag.tydef list ;
+  tags : Logs.Tag.set ;
+}
 
 and header = {
   facility : Syslog_message.facility ;
@@ -76,26 +87,28 @@ let create
     ?(facility=Syslog_message.User_Level_Messages)
     ?(severity=Syslog_message.Notice)
     ?(hostname="") ?(app_name="") ?(procid="") ?(msgid="")
-    ?(tags=[]) ?(msg="") ~ts () =
+    ?(structured_data=[]) ?(msg="") ~ts () =
   let header = { facility ; severity ; version = 1 ; ts ;
                  hostname ; app_name ; procid ; msgid } in
-  { header ; tags ; msg }
+  { header ; structured_data ; msg }
 
 let fcreate
     ?(facility=Syslog_message.User_Level_Messages)
     ?(severity=Syslog_message.Notice)
     ?(hostname="") ?(app_name="") ?(procid="") ?(msgid="")
-    ?(tags=[]) ~ts () =
+    ?(structured_data=[]) ~ts () =
   Format.kasprintf begin fun msg ->
     let header = { facility ; severity ; version = 1 ; ts ;
                    hostname ; app_name ; procid ; msgid } in
-    { header ; tags ; msg }
+    { header ; structured_data ; msg }
   end
 
 let equal_structured_data =
   let module SM = Map.Make(String) in
   let load m =
-    List.fold_left (fun a (k, v) -> SM.add k v a) SM.empty m in
+    List.fold_left begin fun a { section ; tags ; _ } ->
+      SM.add section tags a
+    end SM.empty m in
   fun tags tags' ->
     let tags = load tags in
     let tags' = load tags' in
@@ -108,7 +121,7 @@ let equal_structured_data =
 let equal t t' =
   t.header = t'.header &&
   t.msg = t'.msg &&
-  equal_structured_data t.tags t'.tags
+  equal_structured_data t.structured_data t'.structured_data
 
 let pp_print_string_option ppf = function
   | "" -> Format.pp_print_char ppf '-'
@@ -139,27 +152,27 @@ let pp_print_tagset ?pp_space pp ppf set =
     true
   end set false |> fun _ -> ()
 
-let pp_print_group ppf (name, set) =
+let pp_print_group ppf { section ; tags ; _ } =
   let pp_space ppf () = Format.pp_print_char ppf ' ' in
   Format.fprintf ppf "[%s %a]"
-    name (pp_print_tagset ~pp_space pp_print_kv) set
+    section (pp_print_tagset ~pp_space pp_print_kv) tags
 
 let pp_print_structured_data ppf = function
   | [] -> Format.pp_print_char ppf '-'
-  | tags ->
+  | structured_data ->
     Format.pp_print_list
-      ~pp_sep:(fun _ppf () -> ()) pp_print_group ppf tags
+      ~pp_sep:(fun _ppf () -> ()) pp_print_group ppf structured_data
 
-let pp ppf { header ; tags ; msg } =
+let pp ppf { header ; structured_data ; msg } =
   match msg with
   | "" ->
     Format.fprintf ppf "%a %a"
       pp_print_header header
-      pp_print_structured_data tags
+      pp_print_structured_data structured_data
   | _ ->
     Format.fprintf ppf "%a %a BOM%s"
       pp_print_header header
-      pp_print_structured_data tags msg
+      pp_print_structured_data structured_data msg
 
 let to_string t =
   Format.asprintf "%a" pp t
@@ -209,18 +222,64 @@ let sd_param =
   let open Tyre in
   sd_name <* char '=' <&> char '"' *> param_value <* char '"'
 
+let parse_bool s =
+  match String.lowercase_ascii s with
+  | "true" | "t" -> Some true
+  | "false" | "f" -> Some false
+  | _ -> None
+
+let uint64_of_string_opt v =
+  try Some (Uint64.of_string v) with _ -> None
+
+let pp_print_int64 ppf v =
+  Format.fprintf ppf "%Ld" v
+
 let tags_of_seq =
   let defs_table = Hashtbl.create 13 in
   fun s ->
     let open Logs.Tag in
-    Seq.fold_left begin fun a (k, v) ->
-      match Hashtbl.find_opt defs_table k with
-      | Some d -> add d v a
-      | None ->
+    Seq.fold_left begin fun (tydefs, set) (k, v) ->
+      match Hashtbl.find_opt defs_table k,
+            parse_bool v,
+            Int64.of_string_opt v,
+            uint64_of_string_opt v,
+            Float.of_string_opt v with
+      | Some t, Some b, _, _, _ ->
+        Tag.TS.add t tydefs, Tag.add Bool t b set
+      | None, Some b, _, _, _ ->
+        let d = def k Format.pp_print_bool in
+        let td = Tag.bool d in
+        Hashtbl.add defs_table k td ;
+        Tag.TS.add td tydefs, add d b set
+      | Some t, None, Some i, _, _ ->
+        Tag.TS.add t tydefs, Tag.add I64 t i set
+      | None, None, Some i, _, _ ->
+        let d = def k pp_print_int64 in
+        let td = Tag.i64 d in
+        Hashtbl.add defs_table k td ;
+        Tag.TS.add td tydefs, add d i set
+      | Some t, None, None, Some i, _ ->
+        Tag.TS.add t tydefs, Tag.add U64 t i set
+      | None, None, None, Some i, _ ->
+        let d = def k Uint64.printer in
+        let td = Tag.u64 d in
+        Hashtbl.add defs_table k td ;
+        Tag.TS.add td tydefs, add d i set
+      | Some t, None, None, None, Some f ->
+        Tag.TS.add t tydefs, Tag.add Float t f set
+      | None, None, None, None, Some f ->
+        let d = def k Format.pp_print_float in
+        let td = Tag.float d in
+        Hashtbl.add defs_table k td ;
+        Tag.TS.add td tydefs, add d f set
+      | Some t, None, None, None, None ->
+        Tag.TS.add t tydefs, Tag.add String t v set
+      | None, None, None, None, None ->
         let d = def k Format.pp_print_string in
-        Hashtbl.add defs_table k d ;
-        add d v a
-    end Logs.Tag.empty s
+        let td = Tag.string d in
+        Hashtbl.add defs_table k td ;
+        Tag.TS.add td tydefs, add d v set
+    end (Tag.TS.empty, Logs.Tag.empty) s
 
 let seq_of_tags s =
   let open Logs.Tag in
@@ -232,8 +291,10 @@ let seq_of_tags s =
 let sd_element =
   let open Tyre in
   conv
-    (fun (name, tags) -> name, tags_of_seq tags)
-    (fun (name, tags) -> (name, seq_of_tags tags))
+    (fun (section, tags) ->
+       let defs, tags = tags_of_seq tags in
+       { section ; defs = Tag.TS.elements defs ; tags })
+    (fun { section ; tags ; _ } -> (section, seq_of_tags tags))
     (char '[' *> sd_name <&> rep (blanks *> sd_param) <* char ']')
 
 let structured_data =
@@ -270,17 +331,17 @@ let stropt_of_string = function
   | s -> Some s
 
 let of_tyre (((((((((facility, severity), version), ts),
-                  hostname), app_name), procid), msgid), tags), msg) =
+                  hostname), app_name), procid), msgid), structured_data), msg) =
   let header = {
     facility ; severity ; version ; ts ;
     hostname ; app_name ; procid ; msgid } in
-  { header ; tags ; msg = string_of_stropt msg }
+  { header ; structured_data ; msg = string_of_stropt msg }
 
 let to_tyre { header = {
     facility ; severity ; version ; ts ;
-    hostname ; app_name ; procid ; msgid } ; tags ; msg } =
+    hostname ; app_name ; procid ; msgid } ; structured_data ; msg } =
   (((((((((facility, severity), version), ts),
-        hostname), app_name), procid), msgid), tags), stropt_of_string msg)
+        hostname), app_name), procid), msgid), structured_data), stropt_of_string msg)
 
 let re =
   let open Tyre in

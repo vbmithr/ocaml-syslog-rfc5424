@@ -6,8 +6,7 @@
 open Rfc5424
 module R : Record.S
 
-val capnp_of_syslog :
-  ?tydefs:Tag.tydef list -> Rfc5424.t -> R.Builder.Record.t
+val capnp_of_syslog : Rfc5424.t -> R.Builder.Record.t
 (** [capnp_of_syslog ?string ... t] is the flowgger capnp
     representation of a RFC5424 syslog entry. If optional tag
     definitions are provided, tags will be encoded with their native
@@ -17,7 +16,6 @@ val capnp_of_syslog :
 val syslog_of_capnp : R.Builder.Record.t -> Rfc5424.t
 
 val pp :
-  ?tydefs:Tag.tydef list ->
   compression:Capnp.Codecs.compression_t -> unit ->
   Format.formatter -> Rfc5424.t -> unit
 (** [pp ... ppf t] formats [t] in [capnp] format. *)

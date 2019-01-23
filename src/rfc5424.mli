@@ -19,6 +19,8 @@ module Tag : sig
   type tydef = Dyn : 'a typ * 'a def -> tydef
   (** Existential type for log tag definiton. *)
 
+  module TS : Set.S with type elt := tydef
+
   val string : string def -> tydef
   val bool : bool def -> tydef
   val float : float def -> tydef
@@ -30,6 +32,9 @@ module Tag : sig
   (** [def typ tydef] is [Some def] is tydef contains a def of type
       ['a], or [None] otherwise. *)
 
+  val add : 'a typ -> tydef -> 'a -> set -> set
+  (** [add is like Logs.Tag.add but uses [tydef] instead of def]. *)
+
   val find : 'a typ -> tydef -> set -> ('a def * 'a option) option
   (** [find typ tydef set] is [Some value] of requested type and
       definition if found in [set], or [None] otherwise. *)
@@ -37,12 +42,15 @@ end
 
 type t = {
   header : header ;
-  tags : structured_data ;
+  structured_data : sd_element list ;
   msg : string ;
 }
 
-and structured_data =
-  (string * Logs.Tag.set) list
+and sd_element = {
+  section: string ;
+  defs : Tag.tydef list ;
+  tags : Logs.Tag.set ;
+}
 
 and header = {
   facility : Syslog_message.facility ;
@@ -62,7 +70,7 @@ val create :
   ?app_name:string ->
   ?procid:string ->
   ?msgid:string ->
-  ?tags:(string * Logs.Tag.set) list ->
+  ?structured_data:sd_element list ->
   ?msg:string -> ts:Ptime.t -> unit -> t
 
 val fcreate :
@@ -72,7 +80,7 @@ val fcreate :
   ?app_name:string ->
   ?procid:string ->
   ?msgid:string ->
-  ?tags:structured_data ->
+  ?structured_data:sd_element list ->
   ts:Ptime.t -> unit -> ('a, Format.formatter, unit, t) format4 -> 'a
 
 val equal : t -> t -> bool
@@ -86,11 +94,11 @@ val severity_of_level : Logs.level -> Syslog_message.severity
 (**/**)
 
 val equal_structured_data :
-  structured_data -> structured_data -> bool
+  sd_element list -> sd_element list -> bool
 val pp_print_structured_data :
-  Format.formatter -> structured_data -> unit
+  Format.formatter -> sd_element list -> unit
 val sd_name : string Tyre.t
-val structured_data : structured_data Tyre.t
+val structured_data : sd_element list Tyre.t
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2019 Vincent Bernardoff

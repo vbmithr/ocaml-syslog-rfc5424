@@ -59,9 +59,9 @@ let build_pairs ~tydefs section tags =
     p :: pairs
   end tags pairs
 
-let capnp_of_syslog ?(tydefs=[])
+let capnp_of_syslog
     ({ header = { facility; severity; version = _; ts;
-                  hostname; app_name; procid; msgid }; tags; msg } : Rfc5424.t) =
+                  hostname; app_name; procid; msgid }; structured_data; msg } : Rfc5424.t) =
   let r = Record.init_root () in
   Record.facility_set_exn r (Syslog_message.int_of_facility facility) ;
   Record.severity_set_exn r (Syslog_message.int_of_severity severity) ;
@@ -72,9 +72,9 @@ let capnp_of_syslog ?(tydefs=[])
   iter_non_empty_string msgid ~f:(Record.msgid_set r) ;
   iter_non_empty_string msg ~f:(Record.msg_set r) ; (* OVH needs this *)
   iter_non_empty_string msg ~f:(Record.full_msg_set r) ;
-  let pairs = List.fold_left begin fun a (section, tags) ->
-      List.rev_append (build_pairs section ~tydefs tags) a
-    end [] tags in
+  let pairs = List.fold_left begin fun a {section ; defs ; tags } ->
+      List.rev_append (build_pairs section ~tydefs:defs tags) a
+    end [] structured_data in
   let _ = Record.pairs_set_list r pairs in
   r
 
@@ -104,28 +104,50 @@ let syslog_of_capnp r =
     List.fold_left begin fun (c, m) p ->
       let k = Pair.key_get p in
       let v = Pair.value_get p in
-      let update d v m =
+      let update td d v m =
         SM.update c begin function
-          | None -> Some (Logs.Tag.(add d v empty))
-          | Some s -> Some (Logs.Tag.add d v s)
+          | None ->
+            Some (Tag.TS.singleton td, Logs.Tag.(add d v empty))
+          | Some (defs, tags) ->
+            Some (Tag.TS.add td defs, Logs.Tag.add d v tags)
         end m in
       match Pair.Value.get v with
       | String s when k = rfc5424_section -> s, m
-      | String s -> c, update (Logs.Tag.def k Format.pp_print_string) s m
-      | Bool b -> c, update (Logs.Tag.def k Format.pp_print_bool) b m
-      | F64 f -> c, update (Logs.Tag.def k Format.pp_print_float) f m
-      | I64 i -> c, update (Logs.Tag.def k pp_print_int64) i m
-      | U64 i -> c, update (Logs.Tag.def k Uint64.printer) i m
-      | Null -> c, update (Logs.Tag.def k Format.pp_print_space) () m
+      | String s ->
+        let d = Logs.Tag.def k Format.pp_print_string in
+        let td = Tag.string d in
+        c, update td d s m
+      | Bool b ->
+        let d = Logs.Tag.def k Format.pp_print_bool in
+        let td = Tag.bool d in
+        c, update td d b m
+      | F64 f ->
+        let d = Logs.Tag.def k Format.pp_print_float in
+        let td = Tag.float d in
+        c, update td d f m
+      | I64 i ->
+        let d = Logs.Tag.def k pp_print_int64 in
+        let td = Tag.i64 d in
+        c, update td d i m
+      | U64 i ->
+        let d = Logs.Tag.def k Uint64.printer in
+        let td = Tag.u64 d in
+        c, update td d i m
+      | Null ->
+        let d = Logs.Tag.def k Format.pp_print_space in
+        let td = Tag.u d in
+        c, update td d () m
       | Undefined _ -> c, m
     end ("", SM.empty) (Record.pairs_get_list r) in
-  let tags = SM.bindings tags in
+  let structured_data = SM.fold begin fun section (defs, tags) a ->
+      { section ; defs = Tag.TS.elements defs ; tags } :: a
+    end tags [] in
   Rfc5424.create
     ?facility ?severity ?hostname
-    ?app_name ?procid ?msgid ?msg ~tags ~ts ()
+    ?app_name ?procid ?msgid ?msg ~structured_data ~ts ()
 
-let pp ?tydefs ~compression () ppf t =
-  let r = capnp_of_syslog ?tydefs t in
+let pp ~compression () ppf t =
+  let r = capnp_of_syslog t in
   let m = R.Builder.Record.to_message r in
   Format.pp_print_string ppf (Capnp.Codecs.serialize ~compression m)
 
