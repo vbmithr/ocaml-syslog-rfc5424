@@ -17,12 +17,12 @@ let build_pairs ~tydefs section tags =
   let set_value : type a. a Tag.typ -> Pair.Value.t -> a -> unit =
     fun typ v tagv ->
       match typ with
-      | String -> Pair.Value.string_set v tagv
-      | Bool -> Pair.Value.bool_set v tagv
-      | Float -> Pair.Value.f64_set v tagv
-      | I64 -> Pair.Value.i64_set v tagv
-      | U64 -> Pair.Value.u64_set v tagv
-      | U -> Pair.Value.null_set v in
+      | Tag.String -> Pair.Value.string_set v tagv
+      | Tag.Bool -> Pair.Value.bool_set v tagv
+      | Tag.Float -> Pair.Value.f64_set v tagv
+      | Tag.I64 -> Pair.Value.i64_set v tagv
+      | Tag.U64 -> Pair.Value.u64_set v tagv
+      | Tag.U -> Pair.Value.null_set v in
   let create_pair :
     type a. Logs.Tag.set -> a Tag.typ -> Tag.tydef -> Logs.Tag.set * Pair.t option
     = fun tags typ tydef ->
