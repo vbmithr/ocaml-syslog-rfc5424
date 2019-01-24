@@ -8,6 +8,7 @@
  (name rfc5424_capnp)
  (public_name syslog-rfc5424-capnp)
  (modules Record Rfc5424_capnp)
+ (optional)
  (flags -w -55)
  (libraries rfc5424 capnp))
 
