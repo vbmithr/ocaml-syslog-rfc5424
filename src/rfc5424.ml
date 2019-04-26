@@ -89,8 +89,9 @@ let create_sd_element ?(defs=[]) ~section ~tags =
 let create
     ?(facility=Syslog_message.User_Level_Messages)
     ?(severity=Syslog_message.Notice)
+    ?(ts=Ptime.min)
     ?(hostname="") ?(app_name="") ?(procid="") ?(msgid="")
-    ?(structured_data=[]) ?msg ~ts () =
+    ?(structured_data=[]) ?msg () =
   let header = { facility ; severity ; version = 1 ; ts ;
                  hostname ; app_name ; procid ; msgid } in
   { header ; structured_data ; msg }
@@ -98,8 +99,9 @@ let create
 let fcreate
     ?(facility=Syslog_message.User_Level_Messages)
     ?(severity=Syslog_message.Notice)
+    ?(ts=Ptime.min)
     ?(hostname="") ?(app_name="") ?(procid="") ?(msgid="")
-    ?(structured_data=[]) ~ts () =
+    ?(structured_data=[]) () =
   Format.kasprintf begin fun msg ->
     let header = { facility ; severity ; version = 1 ; ts ;
                    hostname ; app_name ; procid ; msgid } in
@@ -132,12 +134,16 @@ let pp_print_string_option ppf = function
   | "" -> Format.pp_print_char ppf '-'
   | s -> Format.pp_print_string ppf s
 
+let pp_print_ts ppf ts =
+  if Ptime.(equal ts min) then Format.pp_print_char ppf '-'
+  else Ptime.pp_rfc3339 ~frac_s:6 ~tz_offset_s:0 () ppf ts
+
 let pp_print_header ppf { facility ; severity ; version ; ts ;
                           hostname ; app_name ; procid ; msgid } =
   Format.fprintf ppf "<%d>%d %a %a %a %a %a"
     Syslog_message.(int_of_facility facility * 8 + int_of_severity severity)
     version
-    (Ptime.pp_rfc3339 ~frac_s:6 ~tz_offset_s:0 ()) ts
+    pp_print_ts ts
     pp_print_string_option hostname
     pp_print_string_option app_name
     pp_print_string_option procid
@@ -205,17 +211,19 @@ let pri =
     (fun (f, s) -> int_of_facility f * 8 + int_of_severity s)
     Tyre.(char '<' *> int <* char '>')
 
-let ts =
+let tsopt =
   let open Rresult in
   let open Tyre in
-  conv begin fun s ->
-    match Ptime.of_rfc3339 s with
-    | Error (`RFC3339 _) as e ->
-      R.error_msg_to_invalid_arg (Ptime.rfc3339_error_to_msg e)
-    | Ok (t, _, _) -> t
+  conv begin function
+    | `Left () -> Ptime.min
+    | `Right s ->
+      match Ptime.of_rfc3339 s with
+      | Error (`RFC3339 _) as e ->
+        R.error_msg_to_invalid_arg (Ptime.rfc3339_error_to_msg e)
+      | Ok (t, _, _) -> t
   end
-    (fun s -> Ptime.to_rfc3339 s)
-    (pcre "[0-9+-\\.:TZtz]+")
+    (fun t -> if Ptime.(equal t min) then `Left () else `Right (Ptime.to_rfc3339 t))
+    (char '-' <|> pcre "[0-9+-\\.:TZtz]+")
 
 let stropt =
   let open Tyre in
@@ -352,7 +360,7 @@ let re =
   conv of_tyre to_tyre
     (whole_string (pri <&>
                    int <&>
-                   blanks *> ts <&>
+                   blanks *> tsopt <&>
                    blanks *> stropt <&> (* hostname *)
                    blanks *> stropt <&> (* app_name *)
                    blanks *> stropt <&> (* procid *)
