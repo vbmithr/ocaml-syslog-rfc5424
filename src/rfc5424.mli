@@ -43,7 +43,7 @@ end
 type t = {
   header : header ;
   structured_data : sd_element list ;
-  msg : string ;
+  msg : [`Utf8 of string | `Ascii of string] option ;
 }
 
 and sd_element = {
@@ -75,7 +75,7 @@ val create :
   ?procid:string ->
   ?msgid:string ->
   ?structured_data:sd_element list ->
-  ?msg:string -> ts:Ptime.t -> unit -> t
+  ?msg:[`Utf8 of string | `Ascii of string] -> ts:Ptime.t -> unit -> t
 
 val fcreate :
   ?facility:Syslog_message.facility ->

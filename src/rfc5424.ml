@@ -63,7 +63,7 @@ end
 type t = {
   header : header ;
   structured_data : sd_element list ;
-  msg : string ;
+  msg : [`Utf8 of string | `Ascii of string ] option ;
 }
 
 and sd_element = {
@@ -90,7 +90,7 @@ let create
     ?(facility=Syslog_message.User_Level_Messages)
     ?(severity=Syslog_message.Notice)
     ?(hostname="") ?(app_name="") ?(procid="") ?(msgid="")
-    ?(structured_data=[]) ?(msg="") ~ts () =
+    ?(structured_data=[]) ?msg ~ts () =
   let header = { facility ; severity ; version = 1 ; ts ;
                  hostname ; app_name ; procid ; msgid } in
   { header ; structured_data ; msg }
@@ -103,7 +103,9 @@ let fcreate
   Format.kasprintf begin fun msg ->
     let header = { facility ; severity ; version = 1 ; ts ;
                    hostname ; app_name ; procid ; msgid } in
-    { header ; structured_data ; msg }
+    match msg with
+    | "" -> { header ; structured_data ; msg = None}
+    | msg -> { header ; structured_data ; msg = Some (`Ascii msg) }
   end
 
 let equal_structured_data =
@@ -168,11 +170,15 @@ let pp_print_structured_data ppf = function
 
 let pp ppf { header ; structured_data ; msg } =
   match msg with
-  | "" ->
+  | None ->
     Format.fprintf ppf "%a %a"
       pp_print_header header
       pp_print_structured_data structured_data
-  | _ ->
+  | Some (`Ascii msg) ->
+    Format.fprintf ppf "%a %a %s"
+      pp_print_header header
+      pp_print_structured_data structured_data msg
+  | Some (`Utf8 msg) ->
     Format.fprintf ppf "%a %a BOM%s"
       pp_print_header header
       pp_print_structured_data structured_data msg
@@ -324,34 +330,22 @@ let structured_data =
 let msg =
   let open Tyre in
   conv
-    (function `Left msg -> msg | `Right msg -> msg)
-    (fun s ->
-       let len = String.length s in
-       if len > 2 || String.sub s 0 3 = "BOM" then
-         `Left (String.sub s 3 (len - 3))
-       else `Right s)
+    (function `Left msg -> `Utf8 msg | `Right msg -> `Ascii msg)
+    (function `Ascii msg -> `Right msg | `Utf8 msg -> `Left msg)
     (str "BOM" *> pcre ".*" <|> pcre "[^B].*")
-
-let string_of_stropt = function
-  | None -> ""
-  | Some s -> s
-
-let stropt_of_string = function
-  | "" -> None
-  | s -> Some s
 
 let of_tyre (((((((((facility, severity), version), ts),
                   hostname), app_name), procid), msgid), structured_data), msg) =
   let header = {
     facility ; severity ; version ; ts ;
     hostname ; app_name ; procid ; msgid } in
-  { header ; structured_data ; msg = string_of_stropt msg }
+  { header ; structured_data ; msg }
 
 let to_tyre { header = {
     facility ; severity ; version ; ts ;
     hostname ; app_name ; procid ; msgid } ; structured_data ; msg } =
   (((((((((facility, severity), version), ts),
-        hostname), app_name), procid), msgid), structured_data), stropt_of_string msg)
+        hostname), app_name), procid), msgid), structured_data), msg)
 
 let re =
   let open Tyre in
