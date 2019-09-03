@@ -18,7 +18,7 @@ module Tag = struct
 
   type tydef = Dyn : 'a typ * 'a def -> tydef
 
-  module TS = Set.Make(struct type t = tydef let compare = Pervasives.compare end)
+  module TS = Set.Make(struct type t = tydef let compare = Stdlib.compare end)
 
   let string v = Dyn (String, v)
   let bool v = Dyn (Bool, v)
