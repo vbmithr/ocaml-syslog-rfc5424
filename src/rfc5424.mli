@@ -57,6 +57,7 @@ and header = {
   severity : Syslog_message.severity ;
   version : int ;
   ts : Ptime.t ;
+  tz_offset_s : int option ;
   hostname : string ;
   app_name : string ;
   procid : string ;
@@ -71,6 +72,7 @@ val create :
   ?facility:Syslog_message.facility ->
   ?severity:Syslog_message.severity ->
   ?ts:Ptime.t ->
+  ?tz_offset_s:int ->
   ?hostname:string ->
   ?app_name:string ->
   ?procid:string ->
@@ -82,6 +84,7 @@ val fcreate :
   ?facility:Syslog_message.facility ->
   ?severity:Syslog_message.severity ->
   ?ts:Ptime.t ->
+  ?tz_offset_s:int ->
   ?hostname:string ->
   ?app_name:string ->
   ?procid:string ->

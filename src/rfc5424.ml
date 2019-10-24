@@ -77,6 +77,7 @@ and header = {
   severity : Syslog_message.severity ;
   version : int ;
   ts : Ptime.t ;
+  tz_offset_s: int option ;
   hostname : string ;
   app_name : string ;
   procid : string ;
@@ -90,21 +91,23 @@ let create
     ?(facility=Syslog_message.User_Level_Messages)
     ?(severity=Syslog_message.Notice)
     ?(ts=Ptime.min)
+    ?(tz_offset_s)
     ?(hostname="") ?(app_name="") ?(procid="") ?(msgid="")
     ?(structured_data=[]) ?msg () =
   let header = { facility ; severity ; version = 1 ; ts ;
-                 hostname ; app_name ; procid ; msgid } in
+                 tz_offset_s ; hostname ; app_name ; procid ; msgid } in
   { header ; structured_data ; msg }
 
 let fcreate
     ?(facility=Syslog_message.User_Level_Messages)
     ?(severity=Syslog_message.Notice)
     ?(ts=Ptime.min)
+    ?(tz_offset_s)
     ?(hostname="") ?(app_name="") ?(procid="") ?(msgid="")
     ?(structured_data=[]) () =
   Format.kasprintf begin fun msg ->
     let header = { facility ; severity ; version = 1 ; ts ;
-                   hostname ; app_name ; procid ; msgid } in
+                   tz_offset_s ; hostname ; app_name ; procid ; msgid } in
     match msg with
     | "" -> { header ; structured_data ; msg = None}
     | msg -> { header ; structured_data ; msg = Some (`Ascii msg) }
@@ -134,16 +137,16 @@ let pp_print_string_option ppf = function
   | "" -> Format.pp_print_char ppf '-'
   | s -> Format.pp_print_string ppf s
 
-let pp_print_ts ppf ts =
+let pp_print_ts ppf (ts, tz_offset_s) =
   if Ptime.(equal ts min) then Format.pp_print_char ppf '-'
-  else Ptime.pp_rfc3339 ~frac_s:6 ~tz_offset_s:0 () ppf ts
+  else Ptime.pp_rfc3339 ?tz_offset_s ~frac_s:6 () ppf ts
 
 let pp_print_header ppf { facility ; severity ; version ; ts ;
-                          hostname ; app_name ; procid ; msgid } =
+                          tz_offset_s ; hostname ; app_name ; procid ; msgid } =
   Format.fprintf ppf "<%d>%d %a %a %a %a %a"
     Syslog_message.(int_of_facility facility * 8 + int_of_severity severity)
     version
-    pp_print_ts ts
+    pp_print_ts (ts, tz_offset_s)
     pp_print_string_option hostname
     pp_print_string_option app_name
     pp_print_string_option procid
@@ -215,14 +218,15 @@ let tsopt =
   let open Rresult in
   let open Tyre in
   conv begin function
-    | `Left () -> Ptime.min
+    | `Left () -> (Ptime.min, None)
     | `Right s ->
       match Ptime.of_rfc3339 s with
       | Error (`RFC3339 _) as e ->
         R.error_msg_to_invalid_arg (Ptime.rfc3339_error_to_msg e)
-      | Ok (t, _, _) -> t
+      | Ok (t, tz_offset_s, _) -> (t, tz_offset_s)
   end
-    (fun t -> if Ptime.(equal t min) then `Left () else `Right (Ptime.to_rfc3339 t))
+    (fun (t, tz_offset_s) ->
+       if Ptime.(equal t min) then `Left () else `Right (Ptime.to_rfc3339 ?tz_offset_s t))
     (char '-' <|> pcre "[0-9+-\\.:TZtz]+")
 
 let stropt =
@@ -342,17 +346,17 @@ let msg =
     (function `Ascii msg -> `Right msg | `Utf8 msg -> `Left msg)
     (str "BOM" *> pcre ".*" <|> pcre "[^B].*")
 
-let of_tyre (((((((((facility, severity), version), ts),
+let of_tyre (((((((((facility, severity), version), (ts, tz_offset_s)),
                   hostname), app_name), procid), msgid), structured_data), msg) =
   let header = {
-    facility ; severity ; version ; ts ;
+    facility ; severity ; version ; ts ; tz_offset_s ;
     hostname ; app_name ; procid ; msgid } in
   { header ; structured_data ; msg }
 
 let to_tyre { header = {
-    facility ; severity ; version ; ts ;
+    facility ; severity ; version ; ts ; tz_offset_s ;
     hostname ; app_name ; procid ; msgid } ; structured_data ; msg } =
-  (((((((((facility, severity), version), ts),
+  (((((((((facility, severity), version), (ts, tz_offset_s)),
         hostname), app_name), procid), msgid), structured_data), msg)
 
 let re =
