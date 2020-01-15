@@ -6,6 +6,7 @@ bug-reports: "https://github.com/vbmithr/ocaml-syslog-rfc5424/issues"
 dev-repo: "git+https://github.com/vbmithr/ocaml-syslog-rfc5424"
 doc: "https://vbmithr.github.io/ocaml-syslog-rfc5424/doc"
 build: [ "dune" "build" "-j" jobs "-p" name ]
+run-test: [ "dune" "runtest" "-j" jobs "-p" name ]
 depends: [
   "dune" {>= "1.11.4"}
   "uint" {>= "2.0.1"}
@@ -14,7 +15,9 @@ depends: [
   "syslog-message" {>= "1.1.0"}
   "ptime" {>= "0.8.5"}
   "tyre" {>= "0.4.1"}
+  "astring" {with-test & >= "0.8.3"}
+  "alcotest" {with-test & >= "0.8.5"}
 ]
-synopsis: "RFC5424."
+synopsis: "RFC5424"
 description: """
 """
