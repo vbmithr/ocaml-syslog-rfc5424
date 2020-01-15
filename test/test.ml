@@ -33,7 +33,9 @@ let full_invalid = [
 let trip = [
   "minimal", Rfc5424.create ~ts:Ptime.epoch () ;
   "empty_hostname", Rfc5424.create ~ts:Ptime.epoch ~hostname:"" () ;
-  "empty_msg", Rfc5424.create ~ts:Ptime.epoch ~msg:"" () ;
+  "empty", Rfc5424.create ~ts:Ptime.epoch () ;
+  "empty_ascii", Rfc5424.create ~ts:Ptime.epoch ~msg:(`Ascii "") () ;
+  "empty_utf8", Rfc5424.create ~ts:Ptime.epoch ~msg:(`Utf8 "") () ;
 ]
 
 let structured_data =
@@ -66,17 +68,17 @@ let parse_print_structured_data =
           check structured_data "type equality" data data'
 
 let roundtrip t =
-  let r = Rfc5424_capnp.capnp_of_syslog t in
-  let rs = Rfc5424_capnp.syslog_of_capnp r in
+  (* let r = Rfc5424_capnp.capnp_of_syslog t in
+   * let rs = Rfc5424_capnp.syslog_of_capnp r in *)
   let s' = Format.asprintf "%a" Rfc5424.pp t in
-  let rs' = Format.asprintf "%a" Rfc5424.pp rs in
-  check string_ts "capnp string equality" s' rs' ;
+  (* let rs' = Format.asprintf "%a" Rfc5424.pp rs in *)
+  (* check string_ts "capnp string equality" s' rs' ; *)
   match of_string s' with
   | Error e -> failf "%a" Tyre.pp_error e
   | Ok t' ->
     let s'' = Format.asprintf "%a" Rfc5424.pp t' in
-    check string "string equality" s' s'' ;
-    check syslog "type equality" t t'
+    check syslog "type equality" t t' ;
+    check string "string equality" s' s''
 
 let parse_print_full =
   fun ?(valid=true) s ->
