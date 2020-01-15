@@ -63,7 +63,7 @@ end
 type t = {
   header : header ;
   structured_data : sd_element list ;
-  msg : [`Utf8 of string | `Ascii of string ] option ;
+  msg : [`Utf8 of string | `Ascii of string ] ;
 }
 
 and sd_element = {
@@ -93,7 +93,7 @@ let create
     ?(ts=Ptime.min)
     ?(tz_offset_s)
     ?(hostname="") ?(app_name="") ?(procid="") ?(msgid="")
-    ?(structured_data=[]) ?msg () =
+    ?(structured_data=[]) ?(msg=`Ascii "") () =
   let header = { facility ; severity ; version = 1 ; ts ;
                  tz_offset_s ; hostname ; app_name ; procid ; msgid } in
   { header ; structured_data ; msg }
@@ -108,9 +108,7 @@ let fcreate
   Format.kasprintf begin fun msg ->
     let header = { facility ; severity ; version = 1 ; ts ;
                    tz_offset_s ; hostname ; app_name ; procid ; msgid } in
-    match msg with
-    | "" -> { header ; structured_data ; msg = None}
-    | msg -> { header ; structured_data ; msg = Some (`Ascii msg) }
+    { header ; structured_data ; msg = `Ascii msg }
   end
 
 let equal_structured_data =
@@ -177,17 +175,16 @@ let pp_print_structured_data ppf = function
     Format.pp_print_list
       ~pp_sep:(fun _ppf () -> ()) pp_print_group ppf structured_data
 
-let pp ppf { header ; structured_data ; msg } =
-  match msg with
-  | None ->
+let pp ppf { header ; structured_data ; msg } = match msg with
+  | `Ascii "" ->
     Format.fprintf ppf "%a %a"
       pp_print_header header
       pp_print_structured_data structured_data
-  | Some (`Ascii msg) ->
+  | `Ascii msg ->
     Format.fprintf ppf "%a %a %s"
       pp_print_header header
       pp_print_structured_data structured_data msg
-  | Some (`Utf8 msg) ->
+  | `Utf8 msg ->
     Format.fprintf ppf "%a %a BOM%s"
       pp_print_header header
       pp_print_structured_data structured_data msg
@@ -348,6 +345,7 @@ let msg =
 
 let of_tyre (((((((((facility, severity), version), (ts, tz_offset_s)),
                   hostname), app_name), procid), msgid), structured_data), msg) =
+  let msg = match msg with None -> `Ascii "" | Some m -> m in
   let header = {
     facility ; severity ; version ; ts ; tz_offset_s ;
     hostname ; app_name ; procid ; msgid } in
@@ -356,6 +354,7 @@ let of_tyre (((((((((facility, severity), version), (ts, tz_offset_s)),
 let to_tyre { header = {
     facility ; severity ; version ; ts ; tz_offset_s ;
     hostname ; app_name ; procid ; msgid } ; structured_data ; msg } =
+  let msg = match msg with `Ascii "" -> None | _ -> Some msg in
   (((((((((facility, severity), version), (ts, tz_offset_s)),
         hostname), app_name), procid), msgid), structured_data), msg)
 

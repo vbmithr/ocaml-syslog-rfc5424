@@ -43,7 +43,7 @@ end
 type t = {
   header : header ;
   structured_data : sd_element list ;
-  msg : [`Utf8 of string | `Ascii of string] option ;
+  msg : [`Utf8 of string | `Ascii of string] ;
 }
 
 and sd_element = {
