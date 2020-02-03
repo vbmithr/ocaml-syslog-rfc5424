@@ -8,6 +8,7 @@ doc: "https://vbmithr.github.io/ocaml-syslog-rfc5424/doc"
 build: [ "dune" "build" "-j" jobs "-p" name ]
 run-test: [ "dune" "runtest" "-j" jobs "-p" name ]
 depends: [
+  "ocaml" {>= "4.08.0"}
   "dune" {>= "1.11.4"}
   "uint" {>= "2.0.1"}
   "rresult" {>= "0.6.0"}
