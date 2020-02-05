@@ -368,6 +368,36 @@ let severity_of_level = function
   | Info -> Informational
   | Debug -> Debug
 
+let reporter
+    ?tz_offset_s ?(defs=[]) ~hostname ~app_name ~procid ~now
+    ?pp_header:_
+    ?(app=Format.std_formatter) ?(dst=Format.err_formatter) () =
+  let procid   = Int.to_string procid in
+  let report src level ~over k msgf =
+    let m ?header:_ ?(tags=Logs.Tag.empty) =
+      let othertags =
+        create_sd_element ~defs ~section:"logs" ~tags in
+      let structured_data =
+        if Logs.Tag.is_empty tags then [] else [othertags] in
+      Format.kasprintf begin fun msg ->
+        let msg = create
+            ?tz_offset_s
+            ~hostname
+            ~procid
+            ~severity:(severity_of_level level)
+            ~app_name:(app_name ^ "." ^ Logs.Src.name src)
+            ~structured_data
+            ~ts:(now ()) ~msg:(`Ascii msg) () in
+        let ppf = match level with App -> app | _ -> dst in
+        pp ppf msg ;
+        over () ;
+        k ()
+      end
+    in
+    msgf m
+  in
+  { Logs.report = report }
+
 (*---------------------------------------------------------------------------
    Copyright (c) 2019 Vincent Bernardoff
 

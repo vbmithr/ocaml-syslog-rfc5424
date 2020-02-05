@@ -88,6 +88,13 @@ val of_string : string -> (t, t Tyre.error) result
 
 val severity_of_level : Logs.level -> Syslog_message.severity
 
+val reporter :
+  ?tz_offset_s:int -> ?defs:Tag.tydef list ->
+  hostname:string -> app_name:string -> procid:int -> now:(unit -> Ptime.t) ->
+  ?pp_header:(Logs.level * string option) Fmt.t ->
+  ?app:Format.formatter ->
+  ?dst:Format.formatter -> unit -> Logs.reporter
+
 (**/**)
 
 val equal_structured_data :
