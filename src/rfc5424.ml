@@ -98,19 +98,6 @@ let create
                  tz_offset_s ; hostname ; app_name ; procid ; msgid } in
   { header ; structured_data ; msg }
 
-let fcreate
-    ?(facility=Syslog_message.User_Level_Messages)
-    ?(severity=Syslog_message.Notice)
-    ?(ts=Ptime.min)
-    ?(tz_offset_s)
-    ?(hostname="") ?(app_name="") ?(procid="") ?(msgid="")
-    ?(structured_data=[]) () =
-  Format.kasprintf begin fun msg ->
-    let header = { facility ; severity ; version = 1 ; ts ;
-                   tz_offset_s ; hostname ; app_name ; procid ; msgid } in
-    { header ; structured_data ; msg = `Ascii msg }
-  end
-
 let equal_structured_data =
   let module SM = Map.Make(String) in
   let load m =

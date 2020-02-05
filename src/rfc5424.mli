@@ -80,18 +80,6 @@ val create :
   ?structured_data:sd_element list ->
   ?msg:[`Utf8 of string | `Ascii of string] -> unit -> t
 
-val fcreate :
-  ?facility:Syslog_message.facility ->
-  ?severity:Syslog_message.severity ->
-  ?ts:Ptime.t ->
-  ?tz_offset_s:int ->
-  ?hostname:string ->
-  ?app_name:string ->
-  ?procid:string ->
-  ?msgid:string ->
-  ?structured_data:sd_element list ->
-  unit -> ('a, Format.formatter, unit, t) format4 -> 'a
-
 val equal : t -> t -> bool
 val pp : Format.formatter -> t -> unit
 val to_string : t -> string
