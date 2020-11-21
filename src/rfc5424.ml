@@ -3,6 +3,8 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+open Tyre
+
 module Tag = struct
   open Logs.Tag
 
@@ -187,14 +189,12 @@ let pri =
     | _ -> None in
   let parse_pri_exn pri =
     match parse_pri pri with Some v -> v | None -> invalid_arg "parse_pri" in
-  let open Tyre in
   conv parse_pri_exn
     (fun (f, s) -> (int_of_facility f * 8) + int_of_severity s)
     Tyre.(char '<' *> int <* char '>')
 
 let tsopt =
   let open Rresult in
-  let open Tyre in
   conv
     (function
       | `Left () -> (Ptime.min, None)
@@ -209,7 +209,6 @@ let tsopt =
     (char '-' <|> pcre "[0-9+-\\.:TZtz]+")
 
 let stropt =
-  let open Tyre in
   conv
     (function `Right s -> s | `Left () -> "")
     (function "" -> `Left () | s -> `Right s)
@@ -217,10 +216,7 @@ let stropt =
 
 let sd_name = Tyre.pcre "[^ =\\]\"]+"
 let param_value = Tyre.pcre "[^\"\\\\\\]]*"
-
-let sd_param =
-  let open Tyre in
-  sd_name <* char '=' <&> char '"' *> param_value <* char '"'
+let sd_param = sd_name <* char '=' <&> char '"' *> param_value <* char '"'
 
 let parse_bool s =
   match String.lowercase_ascii s with
@@ -279,7 +275,6 @@ let seq_of_tags s =
     s Seq.empty
 
 let sd_element =
-  let open Tyre in
   conv
     (fun (section, tags) ->
       let defs, tags = tags_of_seq tags in
@@ -288,7 +283,6 @@ let sd_element =
     (char '[' *> sd_name <&> rep (blanks *> sd_param) <* char ']')
 
 let structured_data =
-  let open Tyre in
   conv
     (function
       | `Left () -> []
@@ -297,7 +291,6 @@ let structured_data =
     (char '-' <|> rep1 sd_element)
 
 let msg =
-  let open Tyre in
   conv
     (function `Left msg -> `Utf8 msg | `Right msg -> `Ascii msg)
     (function `Ascii msg -> `Right msg | `Utf8 msg -> `Left msg)
@@ -345,7 +338,6 @@ let to_tyre
     msg )
 
 let re =
-  let open Tyre in
   conv of_tyre to_tyre
     (whole_string
        ( pri <&> int <&> blanks *> tsopt <&> blanks *> stropt
