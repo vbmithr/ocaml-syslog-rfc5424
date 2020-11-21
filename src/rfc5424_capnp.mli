@@ -16,8 +16,11 @@ val capnp_of_syslog : Rfc5424.t -> R.Builder.Record.t
 val syslog_of_capnp : R.Builder.Record.t -> Rfc5424.t
 
 val pp :
-  compression:Capnp.Codecs.compression_t -> unit ->
-  Format.formatter -> Rfc5424.t -> unit
+  compression:Capnp.Codecs.compression_t ->
+  unit ->
+  Format.formatter ->
+  Rfc5424.t ->
+  unit
 (** [pp ... ppf t] formats [t] in [capnp] format. *)
 
 (*---------------------------------------------------------------------------

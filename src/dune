@@ -2,7 +2,7 @@
  (name rfc5424)
  (public_name syslog-rfc5424)
  (modules Rfc5424)
- (libraries uint rresult logs syslog-message fmt ptime tyre))
+ (libraries rresult logs syslog-message fmt ptime tyre))
 
 ; (library
 ;  (name rfc5424_capnp)
