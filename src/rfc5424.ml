@@ -287,18 +287,13 @@ let sd_element =
     (fun {section; tags; _} -> (section, seq_of_tags tags))
     (char '[' *> sd_name <&> rep (blanks *> sd_param) <* char ']')
 
-let seq_of_list l =
-  let rec aux l () =
-    match l with [] -> Seq.Nil | x :: tail -> Seq.Cons (x, aux tail) in
-  aux l
-
 let structured_data =
   let open Tyre in
   conv
     (function
       | `Left () -> []
       | `Right (a, s) -> List.rev (Seq.fold_left (fun a s -> s :: a) [a] s))
-    (function [] -> `Left () | h :: t -> `Right (h, seq_of_list t))
+    (function [] -> `Left () | h :: t -> `Right (h, List.to_seq t))
     (char '-' <|> rep1 sd_element)
 
 let msg =
