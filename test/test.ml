@@ -115,7 +115,7 @@ let structured_data_valid =
   ( "structured_data_valid",
     List.map
       (fun (n, s) ->
-        test_case n `Quick (fun () -> parse_print_structured_data s))
+        test_case n `Quick (fun () -> parse_print_structured_data s) )
       structured_data_valid )
 
 let structured_data_invalid =
@@ -123,7 +123,7 @@ let structured_data_invalid =
     List.map
       (fun (n, s) ->
         test_case n `Quick (fun () ->
-            parse_print_structured_data ~valid:false s))
+            parse_print_structured_data ~valid:false s ) )
       structured_data_invalid )
 
 let trip =
@@ -140,7 +140,7 @@ let full_invalid =
   ( "full_invalid",
     List.map
       (fun (n, s) ->
-        test_case n `Quick (fun () -> parse_print_full ~valid:false s))
+        test_case n `Quick (fun () -> parse_print_full ~valid:false s) )
       full_invalid )
 
 let () =

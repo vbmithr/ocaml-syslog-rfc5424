@@ -3,8 +3,6 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-open Tyre
-
 module Tag = struct
   open Logs.Tag
 
@@ -77,7 +75,7 @@ and header =
     procid: string;
     msgid: string }
 
-let create_sd_element ?(defs = []) ~section ~tags = {section; defs; tags}
+let create_sd_element ?(defs = []) section tags = {section; defs; tags}
 
 let create ?(facility = Syslog_message.User_Level_Messages)
     ?(severity = Syslog_message.Notice) ?(ts = Ptime.min) ?tz_offset_s
@@ -108,7 +106,7 @@ let equal_structured_data =
       (fun a b ->
         String.equal
           (Format.asprintf "%a" Logs.Tag.pp_set a)
-          (Format.asprintf "%a" Logs.Tag.pp_set b))
+          (Format.asprintf "%a" Logs.Tag.pp_set b) )
       tags tags'
 
 let equal t t' =
@@ -149,7 +147,7 @@ let pp_print_tagset ?pp_space pp ppf set =
       | true, Some pp -> Format.fprintf ppf "%a" pp ()
       | _ -> () ) ;
       Format.fprintf ppf "%a" pp t ;
-      true)
+      true )
     set false
   |> fun _ -> ()
 
@@ -189,12 +187,14 @@ let pri =
     | _ -> None in
   let parse_pri_exn pri =
     match parse_pri pri with Some v -> v | None -> invalid_arg "parse_pri" in
+  let open Tyre in
   conv parse_pri_exn
     (fun (f, s) -> (int_of_facility f * 8) + int_of_severity s)
     Tyre.(char '<' *> int <* char '>')
 
 let tsopt =
   let open Rresult in
+  let open Tyre in
   conv
     (function
       | `Left () -> (Ptime.min, None)
@@ -202,13 +202,14 @@ let tsopt =
         match Ptime.of_rfc3339 s with
         | Error (`RFC3339 _) as e ->
             R.error_msg_to_invalid_arg (Ptime.rfc3339_error_to_msg e)
-        | Ok (t, tz_offset_s, _) -> (t, tz_offset_s) ))
+        | Ok (t, tz_offset_s, _) -> (t, tz_offset_s) ) )
     (fun (t, tz_offset_s) ->
       if Ptime.(equal t min) then `Left ()
-      else `Right (Ptime.to_rfc3339 ?tz_offset_s t))
+      else `Right (Ptime.to_rfc3339 ?tz_offset_s t) )
     (char '-' <|> pcre "[0-9+-\\.:TZtz]+")
 
 let stropt =
+  let open Tyre in
   conv
     (function `Right s -> s | `Left () -> "")
     (function "" -> `Left () | s -> `Right s)
@@ -216,7 +217,10 @@ let stropt =
 
 let sd_name = Tyre.pcre "[^ =\\]\"]+"
 let param_value = Tyre.pcre "[^\"\\\\\\]]*"
-let sd_param = sd_name <* char '=' <&> char '"' *> param_value <* char '"'
+
+let sd_param =
+  let open Tyre in
+  sd_name <* char '=' <&> char '"' *> param_value <* char '"'
 
 let parse_bool s =
   match String.lowercase_ascii s with
@@ -263,7 +267,7 @@ let tags_of_seq =
             let d = def k Format.pp_print_string in
             let td = Tag.string d in
             Hashtbl.add defs_table k td ;
-            (Tag.TS.add td tydefs, add d v set))
+            (Tag.TS.add td tydefs, add d v set) )
       (Tag.TS.empty, Logs.Tag.empty)
       s
 
@@ -271,26 +275,34 @@ let seq_of_tags s =
   let open Logs.Tag in
   fold
     (fun (V (def, v)) a () ->
-      Seq.Cons ((name def, Format.asprintf "%a" (printer def) v), a))
+      Seq.Cons ((name def, Format.asprintf "%a" (printer def) v), a) )
     s Seq.empty
 
 let sd_element =
+  let open Tyre in
   conv
     (fun (section, tags) ->
       let defs, tags = tags_of_seq tags in
-      {section; defs= Tag.TS.elements defs; tags})
+      {section; defs= Tag.TS.elements defs; tags} )
     (fun {section; tags; _} -> (section, seq_of_tags tags))
     (char '[' *> sd_name <&> rep (blanks *> sd_param) <* char ']')
 
+let seq_of_list l =
+  let rec aux l () =
+    match l with [] -> Seq.Nil | x :: tail -> Seq.Cons (x, aux tail) in
+  aux l
+
 let structured_data =
+  let open Tyre in
   conv
     (function
       | `Left () -> []
-      | `Right (a, s) -> List.rev (Seq.fold_left (fun a s -> s :: a) [a] s))
-    (function [] -> `Left () | h :: t -> `Right (h, List.to_seq t))
+      | `Right (a, s) -> List.rev (Seq.fold_left (fun a s -> s :: a) [a] s) )
+    (function [] -> `Left () | h :: t -> `Right (h, seq_of_list t))
     (char '-' <|> rep1 sd_element)
 
 let msg =
+  let open Tyre in
   conv
     (function `Left msg -> `Utf8 msg | `Right msg -> `Ascii msg)
     (function `Ascii msg -> `Right msg | `Utf8 msg -> `Left msg)
@@ -338,6 +350,7 @@ let to_tyre
     msg )
 
 let re =
+  let open Tyre in
   conv of_tyre to_tyre
     (whole_string
        ( pri <&> int <&> blanks *> tsopt <&> blanks *> stropt
@@ -349,7 +362,7 @@ let re =
        blanks *> stropt
        <&> (* msgid *)
        blanks *> structured_data
-       <&> opt (blanks *> msg) ))
+       <&> opt (blanks *> msg) ) )
   |> compile
 
 let of_string = Tyre.exec re
@@ -367,7 +380,7 @@ let reporter ?tz_offset_s ?(defs = []) ~hostname ~app_name ~procid ~now
   let procid = Int.to_string procid in
   let report src level ~over k msgf =
     let m ?header:_ ?(tags = Logs.Tag.empty) =
-      let othertags = create_sd_element ~defs ~section:"logs" ~tags in
+      let othertags = create_sd_element ~defs "logs" tags in
       let structured_data = if Logs.Tag.is_empty tags then [] else [othertags] in
       Format.kasprintf (fun msg ->
           let msg =
@@ -376,7 +389,7 @@ let reporter ?tz_offset_s ?(defs = []) ~hostname ~app_name ~procid ~now
               ~app_name:(app_name ^ "." ^ Logs.Src.name src)
               ~structured_data ~ts:(now ()) ~msg:(`Ascii msg) () in
           let ppf = match level with App -> app | _ -> dst in
-          pp ppf msg ; over () ; k ()) in
+          pp ppf msg ; over () ; k () ) in
     msgf m in
   {Logs.report}
 

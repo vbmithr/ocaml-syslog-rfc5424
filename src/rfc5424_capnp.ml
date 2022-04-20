@@ -37,7 +37,7 @@ let build_pairs ~tydefs section tags =
       (fun ((tags, pairs) as a) (Tag.Dyn (t, _) as tydef) ->
         match create_pair tags t tydef with
         | _, None -> a
-        | tags, Some p -> (tags, p :: pairs))
+        | tags, Some p -> (tags, p :: pairs) )
       (tags, pairs) tydefs in
   let section_pair =
     let p = Pair.init_root () in
@@ -52,7 +52,7 @@ let build_pairs ~tydefs section tags =
       let v = Pair.value_init p in
       Pair.key_set p (Logs.Tag.name d) ;
       Pair.Value.string_set v (Format.asprintf "%a" (Logs.Tag.printer d) t) ;
-      p :: pairs)
+      p :: pairs )
     tags pairs
 
 let capnp_of_syslog
@@ -60,7 +60,7 @@ let capnp_of_syslog
          {facility; severity; version= _; ts; hostname; app_name; procid; msgid};
        structured_data;
        msg } :
-      Rfc5424.t) =
+      Rfc5424.t ) =
   let r = Record.init_root () in
   Record.facility_set_exn r (Syslog_message.int_of_facility facility) ;
   Record.severity_set_exn r (Syslog_message.int_of_severity severity) ;
@@ -75,7 +75,7 @@ let capnp_of_syslog
   let pairs =
     List.fold_left
       (fun a {section; defs; tags} ->
-        List.rev_append (build_pairs section ~tydefs:defs tags) a)
+        List.rev_append (build_pairs section ~tydefs:defs tags) a )
       [] structured_data in
   let _ = Record.pairs_set_list r pairs in
   r
@@ -107,7 +107,7 @@ let syslog_of_capnp r =
             (function
               | None -> Some (Tag.TS.singleton td, Logs.Tag.(add d v empty))
               | Some (defs, tags) ->
-                  Some (Tag.TS.add td defs, Logs.Tag.add d v tags))
+                  Some (Tag.TS.add td defs, Logs.Tag.add d v tags) )
             m in
         match Pair.Value.get v with
         | String s when k = rfc5424_section -> (s, m)
@@ -135,12 +135,12 @@ let syslog_of_capnp r =
             let d = Logs.Tag.def k Format.pp_print_space in
             let td = Tag.u d in
             (c, update td d () m)
-        | Undefined _ -> (c, m))
+        | Undefined _ -> (c, m) )
       ("", SM.empty) (Record.pairs_get_list r) in
   let structured_data =
     SM.fold
       (fun section (defs, tags) a ->
-        {section; defs= Tag.TS.elements defs; tags} :: a)
+        {section; defs= Tag.TS.elements defs; tags} :: a )
       tags [] in
   Rfc5424.create ?facility ?severity ?hostname ?app_name ?procid ?msgid ?msg
     ~structured_data ~ts ()
